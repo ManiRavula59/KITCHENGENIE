@@ -121,41 +121,63 @@ class PrologInterface:
     
     def add_dish(self, name: str, meal_type: str, ingredients: List[str], 
                  recipe: str, is_vegetarian: bool, prep_time: int, cost_level: str) -> bool:
-        """Add new dish to knowledge base"""
+        """Add new dish to knowledge base and persist to kb.pl"""
         try:
             # Format ingredients as Prolog list
             ingredients_str = self._format_prolog_list(ingredients)
-            
-            # Escape quotes in recipe
             recipe_escaped = recipe.replace("'", "\\'")
-            
-            # Convert boolean to Prolog atom
             veg_atom = 'true' if is_vegetarian else 'false'
-            
             query = f"add_new_dish('{name}', {meal_type}, {ingredients_str}, '{recipe_escaped}', {veg_atom}, {prep_time}, {cost_level})"
-            
             results = self._execute_query(query)
-            
             if results is not None:
+                # Persist to kb.pl
+                self._append_dish_to_file(name, meal_type, ingredients, recipe, is_vegetarian, prep_time, cost_level)
                 logger.info(f"Successfully added dish: {name}")
                 return True
             else:
                 logger.error(f"Failed to add dish: {name}")
                 return False
-                
         except Exception as e:
             logger.error(f"Error adding dish {name}: {e}")
             return False
 
+    def _append_dish_to_file(self, name, meal_type, ingredients, recipe, is_vegetarian, prep_time, cost_level):
+        """Append dish fact to kb.pl file"""
+        try:
+            kb_path = "kb.pl"
+            with open(kb_path, "a", encoding="utf-8") as f:
+                ingredients_str = '[' + ', '.join([f"'{ing}'" for ing in ingredients]) + ']'
+                recipe_escaped = recipe.replace("'", "\\'")
+                veg_atom = 'true' if is_vegetarian else 'false'
+                fact = f"dish('{name}', {meal_type}, {ingredients_str}, '{recipe_escaped}', {veg_atom}, {prep_time}, {cost_level}).\n"
+                f.write(fact)
+        except Exception as e:
+            logger.error(f"Error writing dish to kb.pl: {e}")
+
+
     def delete_dish(self, name: str) -> bool:
-        """Remove a dish from the knowledge base"""
+        """Remove a dish from the knowledge base and kb.pl"""
         try:
             query = f"delete_dish('{name}')"
             self._execute_query(query)
+            self._remove_dish_from_file(name)
             return True
         except Exception as e:
             logger.error(f"Error deleting dish {name}: {e}")
             return False
+
+    def _remove_dish_from_file(self, name):
+        """Remove dish fact from kb.pl file"""
+        try:
+            kb_path = "kb.pl"
+            with open(kb_path, "r", encoding="utf-8") as f:
+                lines = f.readlines()
+            with open(kb_path, "w", encoding="utf-8") as f:
+                for line in lines:
+                    if not (line.strip().startswith(f"dish('{name}',") or line.strip().startswith(f"dish(\"{name}\",")):
+                        f.write(line)
+        except Exception as e:
+            logger.error(f"Error removing dish from kb.pl: {e}")
     
     def update_user_preferences(self, preferences: Dict):
         """Update user preferences in Prolog"""

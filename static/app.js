@@ -8,6 +8,7 @@ let currentQuery = null;
 // DOM content loaded event
 document.addEventListener('DOMContentLoaded', function() {
     initializeApp();
+    setupGroceryQuantityInputs();
 });
 
 // Initialize application
@@ -685,6 +686,43 @@ window.MealPlannerApp = {
     handleCancelGeneration
 };
 
+// Grocery quantity/unit input logic
+function setupGroceryQuantityInputs() {
+    const saveBtn = document.getElementById('saveGroceryQtyBtn');
+    const editBtn = document.getElementById('editGroceryQtyBtn');
+    const qtyInputs = document.querySelectorAll('.grocery-qty-input');
+    let savedQuantities = {};
+
+    if (saveBtn) {
+        saveBtn.addEventListener('click', function() {
+            qtyInputs.forEach(input => {
+                const ingredient = input.dataset.ingredient;
+                const value = input.value.trim();
+                savedQuantities[ingredient] = value;
+                input.setAttribute('readonly', 'readonly');
+                if (value) {
+                    input.classList.add('is-valid');
+                } else {
+                    input.classList.remove('is-valid');
+                }
+            });
+            saveBtn.style.display = 'none';
+            editBtn.style.display = 'inline-block';
+        });
+    }
+
+    if (editBtn) {
+        editBtn.addEventListener('click', function() {
+            qtyInputs.forEach(input => {
+                input.removeAttribute('readonly');
+                input.classList.remove('is-valid');
+            });
+            saveBtn.style.display = 'inline-block';
+            editBtn.style.display = 'none';
+        });
+    }
+}
+
 // Delete dish function (index page)
 function deleteDish(dishName) {
     if (!confirm(`Delete dish "${dishName.replace('_',' ')}"?`)) return;
@@ -702,4 +740,43 @@ function deleteDish(dishName) {
             }
         })
         .catch(err => showNotification('Failed to delete dish: ' + err.message, 'error'));
+}
+
+// Export meal plan to PDF
+function exportPlan() {
+    // Gather grocery quantities
+    const qtyInputs = document.querySelectorAll('.grocery-qty-input');
+    let quantities = {};
+    qtyInputs.forEach(input => {
+        const ingredient = input.dataset.ingredient;
+        const value = input.value.trim();
+        if (ingredient) {
+            quantities[ingredient] = value;
+        }
+    });
+
+    fetch('/export_pdf', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({quantities})
+    })
+    .then(response => {
+        if (!response.ok) throw new Error('PDF export failed');
+        return response.blob();
+    })
+    .then(blob => {
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'meal_plan.pdf';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.URL.revokeObjectURL(url);
+    })
+    .catch(err => {
+        showNotification('PDF export failed: ' + err.message, 'error');
+    });
 }

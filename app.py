@@ -5,8 +5,12 @@ import traceback
 import threading
 import uuid
 from datetime import datetime, timedelta
-from flask import Flask, render_template, request, jsonify, session, redirect, url_for, flash
+from flask import Flask, render_template, request, jsonify, session, redirect, url_for, flash, send_file
+
 import matplotlib
+from reportlab.lib.pagesizes import letter
+from reportlab.pdfgen import canvas
+from io import BytesIO
 matplotlib.use('Agg', force=True)  # Use non-interactive backend
 import matplotlib.pyplot as plt
 plt.ioff()  # Turn off interactive mode
@@ -469,6 +473,55 @@ def not_found(error):
     """Handle 404 errors"""
     flash('Page not found.', 'error')
     return redirect(url_for('index'))
+
+
+# PDF export route
+@app.route('/export_pdf', methods=['POST'])
+def export_pdf():
+    """Export meal plan and grocery list (with quantities) as PDF"""
+    meal_plan = session.get('current_meal_plan', {})
+    grocery_list = session.get('current_grocery_list', [])
+    # Get quantities from POST data (JSON)
+    quantities = request.json.get('quantities', {}) if request.is_json else {}
+
+    buffer = BytesIO()
+    pdf = canvas.Canvas(buffer, pagesize=letter)
+    width, height = letter
+    y = height - 40
+    pdf.setFont('Helvetica-Bold', 16)
+    pdf.drawString(40, y, 'Weekly Meal Plan')
+    y -= 30
+    pdf.setFont('Helvetica', 12)
+    for day, meals in meal_plan.items():
+        pdf.drawString(40, y, f"{day.title()}:")
+        y -= 18
+        for meal_type, dish in meals.items():
+            pdf.drawString(60, y, f"{meal_type.title()}: {dish.replace('_', ' ').title()}")
+            y -= 16
+        y -= 8
+        if y < 80:
+            pdf.showPage()
+            y = height - 40
+            pdf.setFont('Helvetica', 12)
+    y -= 20
+    pdf.setFont('Helvetica-Bold', 14)
+    pdf.drawString(40, y, 'Consolidated Grocery List')
+    y -= 24
+    pdf.setFont('Helvetica', 12)
+    for ingredient in grocery_list:
+        qty = quantities.get(ingredient, '')
+        line = f"{ingredient.replace('_', ' ').title()}"
+        if qty:
+            line += f"  -->  {qty}"
+        pdf.drawString(40, y, line)
+        y -= 16
+        if y < 80:
+            pdf.showPage()
+            y = height - 40
+            pdf.setFont('Helvetica', 12)
+    pdf.save()
+    buffer.seek(0)
+    return send_file(buffer, as_attachment=True, download_name='meal_plan.pdf', mimetype='application/pdf')
 
 if __name__ == '__main__':
     print("Starting AI Smart Kitchen Meal Planner...")
